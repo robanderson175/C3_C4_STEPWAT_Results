@@ -1,0 +1,87 @@
+---
+title: "Creating_Weather_Database"
+output: html_document
+---
+### Install Necessary Packages
+```{r}
+library(DBI)
+# this rSFSW2 package is tricky and is good to install fresh from the github in case it's been updated
+#remotes::install_github("DrylandEcology/rSFSW2@reorganize_rSW2")
+library(rSFSW2)
+#remotes::install_github("DrylandEcology/rSW2funs")
+library(rSW2funs)
+#install.packages('cachem', args=c('--no-multiarch','--no-test-load'))
+#library(cachem) ## Needed to install RSQLite
+#install.packages("RSQLite")
+library(RSQLite)
+# system2(
+#   command = "git",
+#   args = paste(
+#     "clone -b main --single-branch --recursive",
+#     "https://github.com/DrylandEcology/rSOILWAT2.git",
+#     "rSOILWAT2"
+#   )
+# )
+# tools::Rcmd(args = "INSTALL rSOILWAT2")
+library(rSOILWAT2)
+#remotes::install_github("DrylandEcology/rSW2utils")
+library(rSW2utils)
+#install.packages("doParallel")
+library(doParallel)
+#install.packages("synchronicity")
+library(synchronicity)
+```
+
+
+# Start
+```{r}
+# get librarys ready
+library(rSFSW2)
+library(rSOILWAT2)
+# Set up new SOILWAT skeleton project
+#setup_rSFSW2_project_infrastructure(dir_prj = 'C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/STEPWAT/Climate_Database/Test')
+
+```
+
+
+```{r}
+#install.packages('elevatr')
+library(elevatr)
+
+test_file <- read.csv("C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/STEPWAT/Climate_Database/Test/1_Input/SWRuns_InputMain_TESTPROJECT_v12.csv")
+
+test_file_coord <- test_file[5:6]
+
+ll_proj <- "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
+elev <- elevatr::get_elev_point(pt_df, prj = ll_proj)
+
+test_file_elev <- elevatr::get_elev_point(test_file_coord, prj = ll_proj)
+
+library(sp)
+# Create an example SpatialPoints
+test_spatialdf <- SpatialPointsDataFrame(test_file[5,6])
+
+```
+
+```{r}
+set.seed(65.7)
+examp_df <- data.frame(x = runif(3, min = -73, max = -72.5), y = runif(3, min = 42,
+    max = 43))
+prj_dd <- "EPSG:4326"
+
+# Create and example data.frame with additional columns
+cats <- data.frame(category = c("H", "M", "L"))
+
+examp_df2 <- data.frame(examp_df, cats)
+
+# Create an example SpatialPoints
+examp_sp <- SpatialPoints(examp_df, proj4string = CRS(prj_dd))
+
+# Create an example SpatialPointsDataFrame
+examp_spdf <- SpatialPointsDataFrame(examp_sp, data = cats)
+
+df_elev_epqs <- get_elev_point(examp_df, prj = prj_dd, src = "epqs")
+
+sp_elev_epqs <- get_elev_point(examp_sp, src = "epqs")
+```
+

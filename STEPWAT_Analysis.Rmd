@@ -1,0 +1,841 @@
+---
+title: "STEPWAT_Analysis"
+output: html_document
+date: '2023-01-26'
+editor_options: 
+  chunk_output_type: console
+---
+
+# Get libraries and clean data for final version we want
+```{r}
+# Load packages
+library(dplyr)
+library(ggplot2)
+library(stringr)
+library(ggpubr)
+
+# Read in full (huge!) csv
+data <- read.csv("C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/STEPWAT/FINAL_OUTPUTS/Final_Biomass_Output.csv")
+
+# Remove Sites we don't want
+data2 <- data[!(data$site == 11| data$site == 12 | data$site == 17 | data$site == 18 | data$site == 36),]
+
+# Clean GCM Names
+data2$GCM2 <- gsub("idem.dall.","", data2$GCM2)
+data2$GCM <- gsub("idem.dall.","",data2$GCM)
+
+# Remove Current data from the Late Run (will have slightly different results than Mid result, just pick one)
+data3 <- data2[!(data2$GCM == "Current" & data2$years == "Late"),]
+
+# Clean years names
+data3$years[data3$GCM == "Current"] <- "Current"
+
+# Remove GCM IPSL-CM5B-LR 
+dataset <- data3[!(data3$GCM == "RCP45.IPSL-CM5B-LR" | data3$GCM == "RCP85.IPSL-CM5B-LR"),]
+
+# Remove a.cool.grass (due to all being 0)
+#dataset <- dataset1[!(dataset1$Rgroup == "a.cool.grass"),]
+
+```
+
+# Set up values for runs
+```{r}
+# Set up values to iterate through all combinations
+site<- unique(dataset$site)
+rgroup<-c("sagebrush","a.cool.forb","a.warm.forb","p.cool.forb",
+          "p.warm.forb","p.cool.grass","p.warm.grass","shrub")   # Remove a.cool.grass (due to all being 0)
+stats<-data.frame(ID=1:19040) # rgroup * RCP * period * site * GCM
+RCP<-c("RCP45","RCP85")
+period<-c("Mid","Late")
+GCM<-unique(dataset$GCM2)
+GCMloop <- GCM[-1]
+Years<-201:300
+
+b<-1
+```
+
+# Create table including stats for output of all iterations other than current
+```{r}
+### Mean, SD, and Median Biomass by Site, RCP, Period, RGroup, GCM
+### Also including stats for precip and temp
+# Create Means table for future data
+for (g in GCMloop){
+for (p in period) { # for each period Mid or Late
+  for (s in RCP) {
+    for (i in site) {
+      for (r in rgroup) {
+        
+        bm<-dataset[dataset$site==i & dataset$years==p & dataset$RCP==s & dataset$GCM2==g & dataset$Year %in% Years,r]
+        precip<-dataset$PPT[dataset$site==i & dataset$years==p & dataset$RCP==s & dataset$GCM2==g & dataset$Year %in% Years]
+        temp<-dataset$Temp[dataset$site==i & dataset$years==p & dataset$RCP==s & dataset$GCM2==g & dataset$Year %in% Years]
+        m.bm<-mean(bm)
+        m.p<-mean(precip)
+        m.t<-mean(temp)
+        med.bm <- median(bm)
+        med.p <- median(precip)
+        med.t<-median(temp)
+        sd.bm<-sd(bm)
+        sd.p<-sd(precip)
+        sd.t<-sd(precip)
+        stats$Site[b]<-i
+        stats$RCP[b]<-s
+        stats$Period[b]<-p
+        stats$Rgroup[b]<-r
+        stats$GCM[b]<-g
+        stats$MAP[b]<-m.p
+        stats$MedAP[b]<-med.p
+        stats$sdP[b]<-sd.p
+        stats$MAT[b]<-m.t
+        stats$MedAT[b]<-med.t
+        stats$sdT[b]<-sd.t
+        stats$M.Bmass[b]<-m.bm
+        stats$SD.Bmass[b]<-sd.bm
+        stats$Med.Bmass[b]<-med.bm
+        b<-b+1
+      }
+    }}}}
+```
+# Create table including stats for output of current
+```{r}
+# Create Means table for Current data
+current_stats <- data.frame(ID=1:280)
+b <- 1
+for (i in site) {
+  for (r in rgroup) {
+    
+    bm.0<-dataset[dataset$site==i & dataset$RCP=="CURRENT" & dataset$Year %in% Years,r]
+    precip.0<-dataset$PPT[dataset$site==i & dataset$RCP=="CURRENT" & dataset$Year %in% Years]
+    temp.0<-dataset$Temp[dataset$site==i & dataset$RCP=="CURRENT" & dataset$Year %in% Years]
+    m.bm.0<-mean(bm.0)
+    m.p.0<-mean(precip.0)
+    m.t.0<-mean(temp.0)
+    med.bm.0<-median(bm.0)
+    med.p.0 <- median(precip.0)
+    med.t.0<-median(temp.0)
+    sd.p.0<-sd(precip.0)
+    sd.t.0<-sd(precip.0)
+    sd.bm.0<-sd(bm.0)
+    current_stats$Site[b]<-i
+    current_stats$RCP[b]<-0
+    current_stats$Period[b]<-0
+    current_stats$Rgroup[b]<-r
+    current_stats$MAP[b]<-m.p.0
+    current_stats$MedAP[b]<-med.p.0
+    current_stats$sdP[b]<-sd.p.0
+    current_stats$MAT[b]<-m.t.0
+    current_stats$MedAT[b]<-med.t.0
+    current_stats$sdT[b]<-sd.t.0
+    current_stats$M.Bmass[b]<-m.bm.0
+    current_stats$SD.Bmass[b]<-sd.bm.0
+    current_stats$Med.Bmass[b]<-med.bm.0
+    b<-b+1
+  }
+}
+
+```
+# Read in historical data and format
+```{r}
+# Read in historical data
+hist_data <- read.csv("C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/STEPWAT/FINAL_OUTPUTS/Historical_Biomass_Output.csv")
+
+# Remove Sites we don't want
+hist_data2 <- hist_data[!(hist_data$site == 11| hist_data$site == 12 | hist_data$site == 17 | hist_data$site == 18 | hist_data$site == 36),]
+
+# Clean GCM Names
+hist_data2$GCM <- gsub("idem.dall.","", hist_data2$GCM)
+hist_data2$GCM2 <- gsub("historical.","",hist_data2$GCM)
+
+# Remove GCM IPSL-CM5B-LR 
+hist_dataset <- hist_data2[!(hist_data2$GCM == "historical.IPSL-CM5B-LR"),]
+```
+
+# Create table including stats for output of historical
+```{r}
+# Create Means table for Historical data
+historical_stats <- data.frame(ID=1:4760) #17*35*8
+b <- 1
+for(g in GCMloop){ 
+for (i in site) {
+  for (r in rgroup) {
+    
+    bm.h<-hist_dataset[hist_dataset$site==i & hist_dataset$GCM2==g & hist_dataset$Year %in% Years,r]
+    precip.h<-hist_dataset$PPT[hist_dataset$site==i & hist_dataset$GCM2==g & hist_dataset$Year %in% Years]
+    temp.h<-hist_dataset$Temp[hist_dataset$site==i & hist_dataset$GCM2==g & hist_dataset$Year %in% Years]
+    m.bm.h<-mean(bm.h)
+    m.p.h<-mean(precip.h)
+    m.t.h<-mean(temp.h)
+    med.bm.h<-median(bm.h)
+    med.p.h <- median(precip.h)
+    med.t.h<-median(temp.h)
+    sd.p.h<-sd(precip.h)
+    sd.t.h<-sd(precip.h)
+    sd.bm.h<-sd(bm.h)
+    historical_stats$Site[b]<-i
+    historical_stats$RCP[b]<-"historical"
+    historical_stats$Period[b]<-"historical"
+    historical_stats$GCM[b]<-g
+    historical_stats$Rgroup[b]<-r
+    historical_stats$MAP[b]<-m.p.h
+    historical_stats$MedAP[b]<-med.p.h
+    historical_stats$sdP[b]<-sd.p.h
+    historical_stats$MAT[b]<-m.t.h
+    historical_stats$MedAT[b]<-med.t.h
+    historical_stats$sdT[b]<-sd.t.h
+    historical_stats$M.Bmass[b]<-m.bm.h
+    historical_stats$SD.Bmass[b]<-sd.bm.h
+    historical_stats$Med.Bmass[b]<-med.bm.h
+    b<-b+1
+  }
+}}
+
+```
+
+# Group annual and perennial forbs for future, current, and historical data
+```{r}
+# Combine forb groups into just annual and perennial for future data
+a.forbs<-c("a.cool.forb","a.warm.forb")
+p.forbs<-c("p.cool.forb","p.warm.forb")
+stats$Rgroup[which(stats$Rgroup%in%a.forbs)] <- "a.forb"
+stats$Rgroup[which(stats$Rgroup%in%p.forbs)] <- "p.forb"
+stats2 <- stats %>% 
+  group_by(Site, RCP, Period, Rgroup, GCM) %>%
+  dplyr::summarise(across(c(M.Bmass, SD.Bmass, Med.Bmass, MAT, MAP), mean))
+stats2 <- as.data.frame(stats2)
+
+
+# Combine forb groups into just annual and perennial for current data
+current_stats$Rgroup[which(current_stats$Rgroup%in%a.forbs)] <- "a.forb"
+current_stats$Rgroup[which(current_stats$Rgroup%in%p.forbs)] <- "p.forb"
+current_stats2 <- current_stats %>% 
+  group_by(Site, RCP, Period, Rgroup) %>%
+  dplyr::summarise(across(c(M.Bmass, SD.Bmass, Med.Bmass, MAT, MAP), mean))
+current_stats2 <- as.data.frame(current_stats2)
+
+
+# Combine forb groups into just annual and perennial for historical data
+historical_stats$Rgroup[which(historical_stats$Rgroup%in%a.forbs)] <- "a.forb"
+historical_stats$Rgroup[which(historical_stats$Rgroup%in%p.forbs)] <- "p.forb"
+historical_stats2 <- historical_stats %>% 
+  group_by(Site, RCP, Period, Rgroup, GCM) %>%
+  dplyr::summarise(across(c(M.Bmass, SD.Bmass, Med.Bmass, MAT, MAP), mean))
+historical_stats2 <- as.data.frame(historical_stats2)
+```
+# Add site type to dataset and combine everything into one
+```{r}
+points <- read.csv("C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/Field_Methods/GPS_Points/STEPWAT_Points/Final_STEPWAT_Points.csv")
+# Site Types
+site.type <- points[,c(1,3)]
+#site.type <- site.type[!duplicated(site.type),]
+names(site.type) <- c("Site", "Site_Type")
+
+# Combine current and future dfs and add site type
+current_stats2$GCM <- "Current"
+full_stats <- rbind(stats2, current_stats2, historical_stats2)
+full_stats <- merge(full_stats,site.type, by = "Site")
+
+# Save this df so I don't need to keep running everything above
+#write.csv(full_stats, "C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/STEPWAT/FINAL_OUTPUTS/Stepwat_Stats_FULL.csv")
+
+```
+
+# Make table of sites with increases and decreases for C3 and C4 grasses
+```{r}
+# Read in full_stats if haven't run all above
+full_stats <- read.csv("C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/STEPWAT/FINAL_OUTPUTS/Stepwat_Stats_FULL.csv")
+
+
+grass_stats <- full_stats[full_stats$Rgroup=="p.cool.grass"|full_stats$Rgroup=="p.warm.grass",]
+
+# Calculate differences from current bmass to projected
+bmassdiff <- data.frame(ID = c(1:4760))
+b <- 1
+
+for (g in GCMloop){
+  for (s in site){
+    for (r in RCP){
+      for (p in period){
+        for (h in c("p.cool.grass", "p.warm.grass")){
+          currentbmass <- grass_stats$M.Bmass[which(grass_stats$Rgroup==h & grass_stats$Period==0 & grass_stats$RCP==0 & grass_stats$GCM == "Current" & grass_stats$Site== s)]
+          projbmass <- grass_stats$M.Bmass[which(grass_stats$Rgroup==h & grass_stats$Period==p & grass_stats$RCP==r & grass_stats$GCM == g & grass_stats$Site== s)]
+          delta <- projbmass - currentbmass
+          bmassdiff$Site[b] <- s
+          bmassdiff$RCP[b]<- r
+          bmassdiff$Period[b]<-p
+          bmassdiff$GCM[b]<-g
+          bmassdiff$Rgroup[b]<-h
+          bmassdiff$M.Bmass.Delta[b]<- delta
+          b <- b+1
+        }
+      }
+    }
+  }
+}
+
+
+# Make table of number of sites increasing or decreasing by median GCM
+site_movement<- data.frame(ID=c(1:4))
+combining <- data.frame(ID=c(1:140))
+b<-1
+c<-1
+
+for(s in site){
+  for (r in RCP){
+      for (p in period){
+        C3.med <- median(bmassdiff$M.Bmass.Delta[which(bmassdiff$Site==s & bmassdiff$RCP==r & bmassdiff$Period==p & bmassdiff$Rgroup=="p.cool.grass")])
+        C4.med <- median(bmassdiff$M.Bmass.Delta[which(bmassdiff$Site==s & bmassdiff$RCP==r & bmassdiff$Period==p & bmassdiff$Rgroup=="p.warm.grass")])
+        combining$RCP[b]<- r
+        combining$Period[b]<-p
+        combining$C3Medians[b] <- C3.med
+        combining$C4Medians[b] <- C4.med
+        b<-b+1
+}}}
+
+for (r in RCP){
+      for (p in period){
+        C3up<-sum(combining$C3Medians[which(combining$RCP==r & combining$Period==p)] > 0)
+        C3down<-sum(combining$C3Medians[which(combining$RCP==r & combining$Period==p)] < 0)
+        C4up<-sum(combining$C4Medians[which(combining$RCP==r & combining$Period==p)] > 0)
+        C4down<-sum(combining$C4Medians[which(combining$RCP==r & combining$Period==p)] < 0)
+        site_movement$RCP[c]<-r
+        site_movement$Period[c]<-p
+        site_movement$C3_Increasing[c]<-C3up
+        site_movement$C3_Decreasing[c]<-C3down
+        site_movement$C4_Increasing[c]<-C4up
+        site_movement$C4_Decreasing[c]<-C4down
+        c<-c+1
+}}
+```
+# Make heatmaps
+```{r}
+# numbers<-c(1:17)
+# GCMnumbers<- cbind(GCMloop,numbers)
+# colnames(GCMnumbers) <- c("GCM", "Numbers")
+# 
+# ## Heatmaps using Base R
+# # All iterations
+# for(r in RCP){
+#   for(p in period){
+#     for(h in c("p.cool.grass", "p.warm.grass")){
+#       
+#     
+# grassbmass <- bmassdiff[which(bmassdiff$RCP==r & bmassdiff$Period==p & bmassdiff$Rgroup==h),]
+# grassbmass<-grassbmass[,-c(1,3,4,6)]
+# 
+# grassbmassnums <- merge(grassbmass, GCMnumbers, by = "GCM")
+# new<-grassbmassnums[order(grassbmassnums$Numbers),]
+# 
+# grassbmassmatrix <- matrix(data=0, nrow=40, ncol = 17)
+# for(s in site){
+#   for(g in numbers){
+#     grassbmassmatrix[s,g]<-grassbmassnums$M.Bmass.Delta[which(grassbmassnums$Site==s & grassbmassnums$Numbers==g)]
+#   }
+# }
+# grassbmassmatrix<-grassbmassmatrix[-c(11,12,17,18,36),]
+# colnames(grassbmassmatrix)<-GCMloop ## Need to check the order of this
+# rownames(grassbmassmatrix)<- paste0("site ", site)
+# heatmap(grassbmassmatrix, Rowv = NA, Colv = NA, main = paste0(r,p,h))
+#     }}}
+
+## Heatmaps Using ggplot
+for (r in RCP) {
+  for (p in period) {
+    for (h in c("p.cool.grass", "p.warm.grass")) {
+      grassbmass <-bmassdiff[which(bmassdiff$RCP == r & bmassdiff$Period == p & bmassdiff$Rgroup == h), ]
+      grassbmass <- grassbmass[, -c(1, 3, 4, 6)]
+      grassbmass$Site<-paste0("Site ", as.numeric(grassbmass$Site))
+      grasshm<-ggplot(grassbmass, aes(GCM, Site)) +
+        geom_tile(aes(fill = M.Bmass.Delta)) +
+        scale_fill_gradient2(
+          expression(Delta ~ "Biomass"),
+          low = "#075AFF",
+          mid = "#FFFFCC",
+          high = "#FF0000") +
+        scale_x_discrete(guide = guide_axis(angle = 90)) +
+        ggtitle(paste0(r," ",p," ",h))
+      print(grasshm)
+    }
+  }
+}
+
+
+# For C3, Late (always RCP45)
+c3l <-bmassdiff[which(bmassdiff$RCP == "RCP45" & bmassdiff$Period == "Late" & bmassdiff$Rgroup == "p.cool.grass"), ]
+c3l <- c3l[, -c(1, 3, 4, 6)]
+c3l$Site<-as.factor(c3l$Site)
+#grassbmass$Site<-paste0("Site ", as.numeric(grassbmass$Site))
+c3lhm<-ggplot(c3l, aes(GCM, Site)) +
+  geom_tile(aes(fill = M.Bmass.Delta)) +
+  scale_fill_gradient2(
+  expression(Delta ~ "Biomass"),
+    low = "#075AFF",
+    mid = "#FFFFCC",
+    high = "#FF0000",
+  limits=c(-10,20)) +
+  scale_x_discrete(guide = guide_axis(angle = 90)) 
+  #ggtitle(paste0(r," ",p," ",h))
+print(c3lhm)
+
+# For C3, Mid (always RCP45)
+c3m <-bmassdiff[which(bmassdiff$RCP == "RCP45" & bmassdiff$Period == "Mid" & bmassdiff$Rgroup == "p.cool.grass"), ]
+c3m <- c3m[, -c(1, 3, 4, 6)]
+c3m$Site<-as.factor(c3m$Site)
+#grassbmass$Site<-paste0("Site ", as.numeric(grassbmass$Site))
+c3mhm<-ggplot(c3m, aes(GCM, Site)) +
+  geom_tile(aes(fill = M.Bmass.Delta)) +
+  scale_fill_gradient2(
+  expression(Delta ~ "Biomass"),
+    low = "#075AFF",
+    mid = "#FFFFCC",
+    high = "#FF0000",
+  limits=c(-10,20)) +
+  scale_x_discrete(guide = guide_axis(angle = 90)) +
+  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+  #ggtitle(paste0(r," ",p," ",h))
+print(c3mhm)
+
+# For C4, Late (always RCP45)
+c4l <-bmassdiff[which(bmassdiff$RCP == "RCP45" & bmassdiff$Period == "Late" & bmassdiff$Rgroup == "p.warm.grass"), ]
+c4l <- c4l[, -c(1, 3, 4, 6)]
+c4l$Site<-as.factor(c4l$Site)
+#grassbmass$Site<-paste0("Site ", as.numeric(grassbmass$Site))
+c4lhm<-ggplot(c4l, aes(GCM, Site)) +
+  geom_tile(aes(fill = M.Bmass.Delta)) +
+  scale_fill_gradient2(
+  expression(Delta ~ "Biomass"),
+    low = "#075AFF",
+    mid = "#FFFFCC",
+    high = "#FF0000",
+  limits=c(-10,20)) +
+  scale_x_discrete(guide = guide_axis(angle = 90)) +
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank())
+  #ggtitle(paste0(r," ",p," ",h))
+print(c4lhm)
+
+# For C4, Mid (always RCP45)
+c4m <-bmassdiff[which(bmassdiff$RCP == "RCP45" & bmassdiff$Period == "Mid" & bmassdiff$Rgroup == "p.warm.grass"), ]
+c4m <- c4m[, -c(1, 3, 4, 6)]
+c4m$Site<-as.factor(c4m$Site)
+#grassbmass$Site<-paste0("Site ", as.numeric(grassbmass$Site))
+c4mhm<-ggplot(c4m, aes(GCM, Site)) +
+  geom_tile(aes(fill = M.Bmass.Delta)) +
+  scale_fill_gradient2(
+  expression(Delta ~ "Biomass"),
+    low = "#075AFF",
+    mid = "#FFFFCC",
+    high = "#FF0000",
+  limits=c(-10,20)) +
+  scale_x_discrete(guide = guide_axis(angle = 90)) +
+  theme(axis.text.x = element_blank(), axis.text.y = element_blank(),
+        axis.ticks.x = element_blank(), axis.ticks.y = element_blank())
+  #ggtitle(paste0(r," ",p," ",h))
+print(c4mhm)
+
+
+## Jk we didn't need to split it up, this makes heatmaps for all we want
+bmassdiff$Site[bmassdiff$Site == 37] <- 11
+bmassdiff$Site[bmassdiff$Site == 38] <- 12
+bmassdiff$Site[bmassdiff$Site == 39] <- 17
+bmassdiff$Site[bmassdiff$Site == 40] <- 18
+bmassdiff$Site <- as.factor(bmassdiff$Site)
+# Make sure Mid will come before Late in plots
+bmassdiff$Period<-factor(bmassdiff$Period, c("Mid", "Late"))
+bmassdiff$Rgroup[bmassdiff$Rgroup=="p.cool.grass"] <- "C3"
+bmassdiff$Rgroup[bmassdiff$Rgroup=="p.warm.grass"] <- "C4"
+RCP45hms<-ggplot(bmassdiff[which(bmassdiff$RCP=="RCP45"),], aes(GCM, Site)) +
+  geom_tile(aes(fill = M.Bmass.Delta)) +
+  scale_fill_gradient2(
+  expression(Delta ~ "Biomass"),
+    #low = "#075AFF",
+    low = "#FF0000",
+    mid = "#FFFFCC",
+    high = "#075AFF",
+  limits=c(-10,20)) +
+  theme_bw()+
+  scale_x_discrete(guide = guide_axis(angle = 90)) +
+  facet_wrap(~Rgroup + Period)
+
+#ggexport(RCP45hms,filename = "RCP45_heatmaps_updated.jpeg", width = 768, height = 768)
+
+cairo_pdf(filename = "RCP85_Heatmap.pdf", width = 8, height = 9)
+RCP85hms
+dev.off()
+
+RCP85hms<-ggplot(bmassdiff[which(bmassdiff$RCP=="RCP85"),], aes(GCM, Site)) +
+  geom_tile(aes(fill = M.Bmass.Delta)) +
+  scale_fill_gradient2(
+  expression(Delta ~ "Biomass"),
+    low = "#FF0000",
+    mid = "#FFFFCC",
+    high = "#075AFF",
+  limits=c(-10,20)) +
+  theme_bw()+
+  scale_x_discrete(guide = guide_axis(angle = 90)) +
+  facet_wrap(~Rgroup + Period)
+
+
+# png(file="RCP85_heatmaps_updated.png",height = 1000, width = 1000)
+# print(RCP85hms)
+# dev.off()
+
+# Combine heatmaps
+ggarrange(c3mhm,c4mhm, c3lhm, c4lhm, ncol = 2, nrow = 2, common.legend = T, align = "v")
+```
+# Calculate differences from current to projected for all groups
+```{r}
+# Calculate differences from current bmass to projected
+bmassdiffall <- data.frame(ID = c(1:14280))
+b <- 1
+
+for (g in GCMloop){
+  for (s in site){
+    for (r in RCP){
+      for (p in period){
+        for (h in unique(full_stats$Rgroup)){
+          histbmassall <- full_stats$M.Bmass[which(full_stats$Rgroup==h & full_stats$Period=="historical" & full_stats$RCP=="historical" & full_stats$GCM== g & full_stats$Site== s)]
+          currentbmassall <- full_stats$M.Bmass[which(full_stats$Rgroup==h & full_stats$Period==0 & full_stats$RCP==0 & full_stats$GCM == "Current" & full_stats$Site== s)]
+          projbmassall <- full_stats$M.Bmass[which(full_stats$Rgroup==h & full_stats$Period==p & full_stats$RCP==r & full_stats$GCM == g & full_stats$Site== s)]
+          histdelta <- histbmassall - currentbmassall
+          deltaall <- projbmassall - currentbmassall
+          perchistdelta <- (histdelta/histbmassall) * 100
+          percdeltaall <- (deltaall/currentbmassall) * 100
+          bmassdiffall$Site[b] <- s
+          bmassdiffall$RCP[b]<- r
+          bmassdiffall$Period[b]<-p
+          bmassdiffall$GCM[b]<-g
+          bmassdiffall$Rgroup[b]<-h
+          bmassdiffall$M.Bmass.Delta.Hist[b] <- histdelta
+          bmassdiffall$M.Bmass.Delta[b]<- deltaall
+          bmassdiffall$Percent.M.Bmass.Delta.Hist[b] <- perchistdelta
+          bmassdiffall$Percent.M.Bmass.Delta[b] <- percdeltaall
+          b <- b+1
+        }
+      }
+    }
+  }
+}
+
+
+# Get median GCM biomass value for each combination
+GCM_meds <- data.frame()
+for (s in site){
+  for (r in RCP){
+    for (p in period){
+      for (h in unique(full_stats$Rgroup)){
+        GCM_med <- median(bmassdiffall$M.Bmass.Delta[which(bmassdiffall$Rgroup==h & bmassdiffall$Period==p & bmassdiffall$RCP==r & bmassdiffall$Site== s)])
+        Hist_GCM_med <-median(bmassdiffall$M.Bmass.Delta.Hist[which(bmassdiffall$Rgroup==h & bmassdiffall$Period==p & bmassdiffall$RCP==r & bmassdiffall$Site== s)])
+        Perc_GCM_med <- median(bmassdiffall$Percent.M.Bmass.Delta[which(bmassdiffall$Rgroup==h & bmassdiffall$Period==p & bmassdiffall$RCP==r & bmassdiffall$Site== s)])
+        Perc_Hist_GCM_med <-median(bmassdiffall$Percent.M.Bmass.Delta.Hist[which(bmassdiffall$Rgroup==h & bmassdiffall$Period==p & bmassdiffall$RCP==r & bmassdiffall$Site== s)])
+        rows <- cbind(s, r, p, h, Hist_GCM_med, GCM_med, Perc_Hist_GCM_med, Perc_GCM_med)
+        GCM_meds <- rbind(GCM_meds, rows)
+      }}}}
+colnames(GCM_meds)<- c("Site", "RCP", "Period", "Rgroup", "Historical_Median_Biomass","Median_Biomass", "Percent_Change_Hist", "Percent_Change")
+GCM_meds$Median_Biomass<- as.numeric(as.character(GCM_meds$Median_Biomass))
+GCM_meds$Historical_Median_Biomass<- as.numeric(as.character(GCM_meds$Historical_Median_Biomass))
+GCM_meds$Percent_Change<- as.numeric(as.character(GCM_meds$Percent_Change))
+GCM_meds$Percent_Change_Hist<- as.numeric(as.character(GCM_meds$Percent_Change_Hist))
+
+
+# Put Historical data into main format
+historical_meds <- GCM_meds[,-c(3,6,8)]#keep in RCP but remove Period
+unique_historical_meds <- unique(historical_meds)
+#unique_historical_meds$RCP <- "Hist"
+unique_historical_meds$Period <- "Hist"
+names(unique_historical_meds)[names(unique_historical_meds)=="Historical_Median_Biomass"] <- "Median_Biomass"
+names(unique_historical_meds)[names(unique_historical_meds)=="Percent_Change_Hist"] <- "Percent_Change"
+GCM_meds2 <- GCM_meds[,!(names(GCM_meds) %in% c("Historical_Median_Biomass","Percent_Change_Hist"))]
+all.GCM.meds <- rbind(GCM_meds2, unique_historical_meds)
+
+
+#write.csv(all.GCM.meds, "C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/STEPWAT/FINAL_OUTPUTS/FULL_GCM_Median_Biomass.csv")
+
+# Calculate stats across all sites for each group
+## Unnecessary for boxplots
+site.stats.table <- data.frame()
+for (r in RCP){
+  for (p in unique(all.GCM.meds$Period)){
+    for (h in unique(all.GCM.meds$Rgroup)){
+     all.sites.med<- all.GCM.meds$Median_Biomass[which(all.GCM.meds$RCP==r & all.GCM.meds$Period==p & all.GCM.meds$Rgroup==h)]
+     all.sites.perc<-all.GCM.meds$Percent_Change[which(all.GCM.meds$RCP==r & all.GCM.meds$Period==p & all.GCM.meds$Rgroup==h)]
+     all.med <- median(all.sites.med)
+     all.perc.med<- median(all.sites.perc)
+     #all.mean <- mean(all.sites)
+     #all.max <- max(all.sites)
+     #all.min <- min(all.sites)
+     #all.q1 <- as.numeric(quantile(all.sites, 0.25))
+     #all.q3 <- as.numeric(quantile(all.sites, 0.75))
+     #all.sd <- sd(all.sites)
+     #all.cv <- all.sd/all.mean
+     #plot.stats <- cbind(r, p, h, all.med, all.mean, all.max, all.min, all.q1, all.q3, all.sd, all.cv)
+     site.stats<-cbind(r,p,h,all.med,all.perc.med)
+     site.stats.table <- rbind(site.stats.table, site.stats)
+    }}}
+colnames(site.stats.table) = c("RCP", "Period", "Rgroup", "Median_Biomass", "Percent_Change") # "Mean", "Max", "Min", "First_Quartile", "Third_Quartile", "SD", "CV")
+i <- c(4,5)
+site.stats.table[,i] <- apply(site.stats.table[,i], 2, function(x) as.numeric(as.character(x))) # Make all necessary columns numeric
+```
+# Make boxplots
+```{r}
+# Make sure Mid will come before Late in plots
+all.GCM.meds$Period<-factor(all.GCM.meds$Period, c("Hist","Mid", "Late"))
+# Reclassify resource group names
+rep_str = c('a.cool.grass'='AGrass','a.forb'='AForb','p.cool.grass'='C3PGrass', 'p.forb'= 'PForb', 'p.warm.grass'='C4PGrass', 'sagebrush'='Sagebrush', 'shrub' = 'Shrubs')
+all.GCM.meds$Rgroup <- str_replace_all(all.GCM.meds$Rgroup, rep_str)
+
+# Split into groups like Palmquist 2021
+sagebrush.stats <- all.GCM.meds[all.GCM.meds$Rgroup=="Sagebrush",]
+sagebrush.stats$Rgroup <- "Big Sagebrush"
+grass.stats <- all.GCM.meds[all.GCM.meds$Rgroup=="C3PGrass" | all.GCM.meds$Rgroup=="C4PGrass",]
+other.stats <- all.GCM.meds[all.GCM.meds$Rgroup=="PForb",]# | all.GCM.meds$Rgroup=="AForb" | all.GCM.meds$Rgroup=="Shrubs",]
+
+
+# Sagebrush Box Plot RCP45
+sagebp <- ggplot(sagebrush.stats[sagebrush.stats$RCP=="RCP45" ,]
+                 , aes(x = as.factor(Period), y = Median_Biomass)) +
+  geom_boxplot(aes(fill = Rgroup)) +
+  xlab("Period") +
+  ylab(expression("Change in Biomass (g/m"^2*")")) +
+  scale_fill_manual("",values = c("#009E73")) +
+    ylim(-350,350) +
+  geom_hline(yintercept = 0, linetype = "dashed", size = 1) +
+  theme_bw(base_size = 15) #+
+  #theme(axis.title.x = element_blank(),
+   #     axis.text.x = element_blank(),
+    #    axis.ticks.x = element_blank())#+
+  #facet_wrap(~ RCP)
+
+# Grasses Box Plot RCP45
+grassbp <- ggplot(grass.stats[grass.stats$RCP=="RCP45",]
+                  , aes(x = as.factor(Period), y = Median_Biomass)) +
+  geom_boxplot(aes(fill = Rgroup)) +
+  xlab("Period") +
+  ylab("")+#expression("Change in Biomass (g/m"^2*")")) +
+  scale_fill_manual("",values = c("#56B4E9","#E69F00")) +
+  ylim(-17.5,17.5) +
+  #ggtitle("RCP 4.5") +
+  geom_hline(yintercept = 0, linetype = "dashed", size = 1) +
+  theme_bw(base_size = 15) #+
+  #theme(axis.title.x = element_blank(),
+   #     axis.text.x = element_blank(),
+    #    axis.ticks.x = element_blank())#+
+  #facet_wrap (~ RCP)
+
+# Other Species Box Plot RCP45
+otherbp <- ggplot(other.stats[other.stats$RCP=="RCP85",]
+                  , aes(x = as.factor(Period), y = Median_Biomass)) +
+  geom_boxplot(aes(fill = Rgroup)) +
+  xlab("Period") +
+  ylab("")+#expression("Change in Biomass (g/m"^2*")")) +
+  scale_fill_manual("",values = c("#0072B2"))+#,"#F0E442",  "#D55E00")) +
+  ylim(-3,3) +
+  geom_hline(yintercept = 0, linetype = "dashed", size = 1) +
+  theme_bw(base_size = 15)+
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())#+
+  #facet_wrap(~ RCP)
+
+#Combine legends
+# sagelegend <- get_legend(sagebp)
+# grasslegend <- get_legend(grassbp)
+# otherlegend <- get_legend(otherbp)
+# fg.legends <- ggarrange(sagelegend, grasslegend, otherlegend, nrow = 7)
+#rm_legend <- function(p){p + theme(legend.position = "none")} #Function to remove legend
+
+# Combine all plots into one
+try1 <- ggarrange(sagebp, grassbp, otherbp, ncol=3,common.legend = F, legend = "bottom",labels = c("(A)", "(B)", "(C)"), widths = c(1,1,1))
+
+try2<- ggarrange(sagebp.perc, grassbp.perc, otherbp.perc, ncol=3,common.legend = F, legend = "bottom", labels = c("(D)", "(E)", "(F)"), widths = c(1,1,1))
+
+ggarrange(try1, try2, nrow = 2, common.legend = F, align = "hv")
+
+library(patchwork)
+try1 + try2 + plot_layout(ncol=1,heights=c(2,2))
+
+# If we want to split by Functional Type
+# ggplot(grass.stats, aes(x = as.factor(Period), y = Median_Biomass)) +
+#   geom_boxplot(aes(fill = RCP)) +
+#   xlab("Period") +
+#   ylab(expression("Change in Biomass (g/m"^2*")")) +
+#   scale_fill_manual("Functional Group",values = c("#F0E442", "#0072B2", "#D55E00")) +
+#   ylim(-18,18) +
+#   facet_wrap(~ Rgroup)
+
+
+######################################################
+# Make boxplots of percent change
+
+# Sagebrush Box Plot RCP45
+sagebp.perc <- ggplot(sagebrush.stats[sagebrush.stats$RCP=="RCP85",]
+                 , aes(x = as.factor(Period), y = Percent_Change)) +
+  geom_boxplot(aes(fill = Rgroup)) +
+  xlab("Period") +
+  ylab(expression("Change in Biomass (%)")) +
+  scale_fill_manual("",values = c("#009E73")) +
+  ylim(-100,100) +
+  geom_hline(yintercept = 0, linetype = "dashed", size = 1) +
+  theme_bw(base_size = 15)  #+
+  #facet_wrap(~ RCP)
+
+# Grasses Box Plot RCP45
+grassbp.perc <- ggplot(grass.stats[grass.stats$RCP=="RCP85",]
+                  , aes(x = as.factor(Period), y = Percent_Change)) +
+  geom_boxplot(aes(fill = Rgroup)) +
+  xlab("Period") +
+  ylab("")+#expression("Change in Biomass (%)")) +
+  scale_fill_manual("",values = c("#56B4E9","#E69F00")) +
+  ylim(-100,100) +
+  #ggtitle("RCP 4.5") +
+  geom_hline(yintercept = 0, linetype = "dashed", size = 1) +
+  theme_bw(base_size = 15)#+
+  #facet_wrap (~ RCP)
+
+# Other Species Box Plot RCP45
+otherbp.perc <- ggplot(other.stats[other.stats$RCP=="RCP85",]
+                  , aes(x = as.factor(Period), y = Percent_Change)) +
+  geom_boxplot(aes(fill = Rgroup)) +
+  xlab("Period") +
+  ylab("")+#expression("Change in Biomass (%)")) +
+  scale_fill_manual("",values = c("#0072B2"))+#,"#F0E442",  "#D55E00")) +
+  ylim(-100,100) +
+  geom_hline(yintercept = 0, linetype = "dashed", size = 1) +
+  theme_bw(base_size = 15)#+
+  #facet_wrap (~ RCP)
+
+GCM.meds.edit <- all.GCM.meds
+# Reclassify resource group names
+rep_str = c('a.cool.grass'='AGrass','a.forb'='AForb','p.cool.grass'='C3PGrass', 'p.forb'= 'PForb', 'p.warm.grass'='C4PGrass', 'Sagebrush'='Big Sagebrush', 'shrub' = 'Shrubs')
+GCM.meds.edit$Rgroup <- str_replace_all(GCM.meds.edit$Rgroup, rep_str)
+GCM.meds.edit$Rgroup <- factor(GCM.meds.edit$Rgroup, levels = c("Big Sagebrush", "C3PGrass", "C4PGrass","PForb"))#,"AForb","Shrubs"))
+
+alllegend <- ggplot(GCM.meds.edit[GCM.meds.edit$RCP=="RCP45",]
+                 , aes(x = as.factor(Period), y = Median_Biomass)) +
+  geom_boxplot(aes(fill = Rgroup))+
+  scale_fill_manual("",values = c("Big Sagebrush"="#009E73","C3PGrass"="#56B4E9","C4PGrass"="#E69F00","PForb"="#0072B2"))+# ,"AForb"="#F0E442", "Shrubs"= "#D55E00"))+
+  theme(legend.direction = "horizontal")+
+  theme(legend.key.size = unit(1, 'cm'), #change legend key size
+        legend.key.height = unit(1, 'cm'), #change legend key height
+        legend.key.width = unit(1, 'cm'), #change legend key width
+        legend.title = element_text(size=14), #change legend title font size
+        legend.text = element_text(size=10)) +
+  guides(fill = guide_legend(nrow = 1))
+
+
+# Combine all plots into one
+allbps <- ggarrange(sagebp, grassbp, otherbp, sagebp.perc, grassbp.perc, otherbp.perc, ncol=3, nrow = 2,common.legend = T, legend = "bottom", legend.grob = get_legend(alllegend), align = "hv", labels = c("(A)", "(B)", "(C)", "(D)", "(E)", "(F)"))
+
+png(filename = "all_boxplots_no_others.png", width = 1000, height = 746)
+print(allbps)
+dev.off()
+
+# Make plots for presentation
+presplots <- ggarrange(sagebp, grassbp, ncol = 2, nrow = 1, common.legend = T, legend = "bottom", legend.grob = get_legend(alllegend), align = "hv")
+presplots_percent <- ggarrange(sagebp.perc, grassbp.perc, ncol = 2, nrow = 1, common.legend = T, legend = "bottom", legend.grob = get_legend(alllegend), align = "hv")
+
+#ggexport(presplots, filename = "RCP45_Boxplots", width = )
+```
+
+# Write csv's to use for ArcGIS
+```{r}
+stepwatpoints_full<- read.csv("C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/Field_Methods/GPS_Points/STEPWAT_Points/STEPWAT_Points_Final_with_Cellnumbers.csv")
+stepwatpoints<-stepwatpoints_full[-c(11,12,17,18,36),]
+colnames(stepwatpoints)[2] <- "Site"
+colnames(stepwatpoints)[24] <- "cellnumbers"
+sitecoords<-stepwatpoints[,c(2,4,5,6)]
+currentc3 <- full_stats[which(full_stats$RCP=="0" & full_stats$Rgroup=="p.cool.grass"),c(2,7)]
+c3.current<-merge(currentc3,sitecoords, by="Site")
+currentc4 <- full_stats[which(full_stats$RCP=="0" & full_stats$Rgroup=="p.warm.grass"),c(2,7)]
+c4.current<-merge(currentc4, sitecoords, by="Site")
+currentsage <- full_stats[which(full_stats$RCP=="0" & full_stats$Rgroup=="sagebrush"),c(2,7)]
+currentforb <- full_stats[which(full_stats$RCP=="0" & full_stats$Rgroup=="p.forb"),c(2,7)]
+
+#write.csv(c3.current,"C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/STEPWAT/FINAL_OUTPUTS/Current_C3_Output.csv")
+#write.csv(c4.current,"C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/STEPWAT/FINAL_OUTPUTS/Current_C4_Output.csv")
+```
+
+#Get range and median of current STEPWAT values
+```{r}
+current_func_values <- data.frame()
+for(h in unique(full_stats$Rgroup)){
+  current_data <- full_stats[which(full_stats$Period=="0" & full_stats$Rgroup==h),7]
+  cur_func_med <- median(current_data)
+  cur_func_min <- min(current_data)
+  cur_func_max <- max(current_data)
+  data_merge <- cbind(h,cur_func_med, cur_func_min, cur_func_max)
+  current_func_values <- rbind(data_merge, current_func_values)
+}
+colnames(current_func_values) = c("Rgroup", "Median_Biomass", "Min_Biomass","Max_Biomass") 
+i <- c(2:4)
+current_func_values[,i] <- apply(current_func_values[,i], 2, function(x) as.numeric(as.character(x)))
+
+```
+
+# Temp and Precip differences
+```{r}
+# Calculate climate data for all periods
+climdata <- data.frame()
+
+for (g in GCMloop){
+  for (s in site){
+    for (r in RCP){
+      for (p in period){
+          histtempall <- full_stats$MAT[which(full_stats$Period=="historical" & full_stats$RCP=="historical" & full_stats$GCM== g & full_stats$Site== s)]
+          currenttempall <- full_stats$MAT[which(full_stats$Period==0 & full_stats$RCP==0 & full_stats$GCM == "Current" & full_stats$Site== s)]
+          projtempall <- full_stats$MAT[which(full_stats$Period==p & full_stats$RCP==r & full_stats$GCM == g & full_stats$Site== s)]
+          histprecipall <- full_stats$MAP[which(full_stats$Period=="historical" & full_stats$RCP=="historical" & full_stats$GCM== g & full_stats$Site== s)]
+          currentprecipall <- full_stats$MAP[which(full_stats$Period==0 & full_stats$RCP==0 & full_stats$GCM == "Current" & full_stats$Site== s)]
+          projprecipall <- full_stats$MAP[which(full_stats$Period==p & full_stats$RCP==r & full_stats$GCM == g & full_stats$Site== s)]
+          hold<-cbind(g,s,r,p,histtempall, currenttempall, projtempall, histprecipall, currentprecipall, projprecipall)
+          climdata<-rbind(climdata,hold)
+        }
+      }
+    }
+  }
+climdata2<-unique(climdata)
+i <- c(5:10)
+climdata2[,i] <- apply(climdata2[,i], 2, function(x) as.numeric(as.character(x)))
+# split into two dataframes to remove duplicate values, even though this is unnecessary
+hist.and.current.clim <- unique(climdata2[,c(1,2,5,6,8,9)])
+proj.clim.45 <- unique(climdata2[which(climdata2$r=="RCP45"),c(1,2,3,4,7,10)])
+
+# Calculate stats
+#historical temp
+mean(hist.and.current.clim$histtempall) #2.327802
+median(hist.and.current.clim$histtempall) #2.071073
+sd(hist.and.current.clim$histtempall) #0.882275
+range(hist.and.current.clim$histtempall) #0.9084873 4.7208767
+#historical precip
+mean(hist.and.current.clim$histprecipall) #296.1411
+median(hist.and.current.clim$histprecipall) #277.5604
+sd(hist.and.current.clim$histprecipall) #82.25261
+range(hist.and.current.clim$histprecipall) #182.2939 520.7409
+#current temp
+mean(hist.and.current.clim$currenttempall) #3.227889
+median(hist.and.current.clim$currenttempall) #3.07691
+sd(hist.and.current.clim$currenttempall) #0.7539422
+range(hist.and.current.clim$currenttempall) #1.995161 5.261097
+#current precip
+mean(hist.and.current.clim$currentprecipall) #332.5486
+median(hist.and.current.clim$currentprecipall) #302.5244
+sd(hist.and.current.clim$currentprecipall) #104.3322
+range(hist.and.current.clim$currentprecipall) #181.8994 614.2331
+#mid century temp
+mean(proj.clim.45[which(proj.clim.45$p=="Mid"),5])#6.211895
+median(proj.clim.45[which(proj.clim.45$p=="Mid"),5])#6.260623
+sd(proj.clim.45[which(proj.clim.45$p=="Mid"),5])#0.7848357
+range(proj.clim.45[which(proj.clim.45$p=="Mid"),5]) #4.954211 8.977084
+#mid century precip
+mean(proj.clim.45[which(proj.clim.45$p=="Mid"),6])#455.5443
+median(proj.clim.45[which(proj.clim.45$p=="Mid"),6])#452.2756
+sd(proj.clim.45[which(proj.clim.45$p=="Mid"),6])#42.46932
+range(proj.clim.45[which(proj.clim.45$p=="Mid"),6])#303.5011 518.8168
+#late century temp
+mean(proj.clim.45[which(proj.clim.45$p=="Late"),5])#7.219322
+median(proj.clim.45[which(proj.clim.45$p=="Late"),5])#7.259229
+sd(proj.clim.45[which(proj.clim.45$p=="Late"),5])#1.0271
+range(proj.clim.45[which(proj.clim.45$p=="Late"),5])#5.530164 10.508073
+#late century precip
+mean(proj.clim.45[which(proj.clim.45$p=="Late"),6])#463.8366
+median(proj.clim.45[which(proj.clim.45$p=="Late"),6])#462.341
+sd(proj.clim.45[which(proj.clim.45$p=="Late"),6])#45.84646
+range(proj.clim.45[which(proj.clim.45$p=="Late"),6])#311.4409 550.5564
+```
